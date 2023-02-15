@@ -11,6 +11,8 @@ from scipy import interpolate
 from matplotlib import pyplot, ticker
 
 from astropy import units
+from astropy.table import Table
+from astropy.io import ascii
 
 from ..etc import source, efficiency, telescopes, spectrum, extract, aperture, detector
 from ..etc.spectrographs import TMTWFOSBlue, TMTWFOSRed, WFOSGrating
@@ -94,7 +96,7 @@ def read_spectrum(spec_file, spec_wave, spec_wave_units, spec_flux, spec_flux_un
     return spec
 
 
-def observed_spectrum(spec, wave, resolution, mag=None, mag_band='g', mag_system='AB', 
+def observed_spectrum(spec, wave, resolution, mag=None, mag_band='g', mag_system='AB',
                       redshift=None, emline_db=None):
     """
     Convert input spectrum to expected (noise-free) observation.
@@ -269,7 +271,7 @@ class WFOSETC(scriptbase.ScriptBase):
 
         parser.add_argument('--blue_grat', default=TMTWFOSBlue.default_grating, type=str,
                             help='Grating to use in the blue arm.  Options are: {0}'.format(
-                                ', '.join([g for g in WFOSGrating.available_gratings.keys() 
+                                ', '.join([g for g in WFOSGrating.available_gratings.keys()
                                             if 'B' in g])))
         bgrat_grp = parser.add_mutually_exclusive_group()
         bgrat_grp.add_argument('--blue_wave', default=None, type=float,
@@ -321,6 +323,8 @@ class WFOSETC(scriptbase.ScriptBase):
         parser.add_argument('-a', '--airmass', default=1.0, type=float, help='Airmass')
         parser.add_argument('-i', '--ipython', default=False, action='store_true',
                             help='After completing the setup, embed in an IPython session.')
+        parser.add_argument('--out_table', default=False, action='store_true',
+                            help='Save output spectra in an ASCII table.')
         parser.add_argument('-p', '--plot', default=True, action='store_false',
                             help='Do not provide a plot of the components of the calculation.')
         parser.add_argument('--snr_units', type=str, default='pixel',
@@ -390,7 +394,7 @@ class WFOSETC(scriptbase.ScriptBase):
                                cen_wave=args.blue_wave, grating_angle=args.blue_angle)
 
         # Pixels per resolution element
-        blue_res_pix = blue_arm.resolution_element(slit_width=effective_slit_width, 
+        blue_res_pix = blue_arm.resolution_element(slit_width=effective_slit_width,
                                                    units='pixels') / args.blue_binning[0]
 
         # Get the wavelength range for each arm
@@ -540,7 +544,34 @@ class WFOSETC(scriptbase.ScriptBase):
     #                numpy.sum(r(snr.wave)*snr.flux)/numpy.sum(r(snr.wave))))
     #    print('i-band weighted mean {0} {1:.1f}'.format(snr_label,
     #                numpy.sum(iband(snr.wave)*snr.flux)/numpy.sum(iband(snr.wave))))
- 
+        if args.out_table:
+            red = Table()
+            red['red_wave'] = red_wave[:]
+            red['red_spec'] = red_spec[:]
+            ascii.write(red, 'red_spec.txt', overwrite=True)
+
+
+            blue = Table()
+            blue['blue_wave'] = blue_wave[:]
+            blue['blue_spec'] = blue_spec[:]
+            ascii.write(blue, 'blue_spec.txt', overwrite=True)
+
+
+            rsnr = Table()
+            rsnr['red_snr_wave'] = red_snr.wave
+            rsnr['red_snr'] = red_snr[:]
+            ascii.write(rsnr, 'red_snr.txt', overwrite=True)
+
+            bsnr = Table()
+            bsnr['red_snr_wave'] = blue_snr.wave
+            bsnr['blue_snr'] = blue_snr[:]
+            ascii.write(bsnr, 'blue_snr.txt', overwrite=True)
+
+            skytab = Table()
+            skytab['sky_wave'] = sky_spectrum.wave
+            skytab['sky'] = sky_spectrum[:]
+            ascii.write(skytab, 'sky_spectrum.txt', overwrite=True)
+
         if args.plot:
             w,h = pyplot.figaspect(1)
             fig = pyplot.figure(figsize=(1.5*w,1.5*h))
@@ -559,7 +590,7 @@ class WFOSETC(scriptbase.ScriptBase):
             ax.legend()
             ax.text(-0.1, 0.5, r'Flux [10$^{-17}$ erg/s/cm$^2$/${\rm \AA}$]',
                     ha='center', va='center', transform=ax.transAxes, rotation='vertical')
-        
+
             ax = fig.add_axes([0.1, 0.1, 0.8, 0.4])
             ax.set_xlim([obj_spectrum.wave[0], obj_spectrum.wave[-1]])
             ax.minorticks_on()
@@ -579,7 +610,3 @@ class WFOSETC(scriptbase.ScriptBase):
 
         if args.ipython:
             embed()
-
-
-
-
